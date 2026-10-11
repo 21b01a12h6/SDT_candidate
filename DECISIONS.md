@@ -1,0 +1,7 @@
+# DECISIONS.md
+
+The employee-code unique index protects the business key and makes duplicate employee creation race-safe. The unique `(emp_code, date)` attendance index both supports per-employee lookups and guarantees one shift record per attendance day. The date/code index supports sorted attendance pages; the employee/punch-in index finds the latest punch for punch-out; the date/late index supports monthly late-record aggregation. Employee joined-date and department indexes support monthly headcount and department filtering. I did not add a separate status index: the current contract's combined filters and date sorting are better served by the existing compound access paths than by a low-cardinality index alone.
+
+For simultaneous punch-ins, each request derives the same attendance date and tries one insert. MongoDB's unique compound index accepts one insert; the others raise `DuplicateKeyError`, which the API maps to 409. The leaderboard uses MongoDB `$rank`, so equal totals share a rank. It filters `rank <= limit` after ranking; therefore all tied employees at the cutoff are included, then sorted by total and employee code.
+
+Department summary starts from employees eligible by month-end and looks up logs, preserving employees with no logs. At 100x data, I would benchmark query plans and move recurring monthly summaries to asynchronously refreshed rollups rather than repeatedly aggregating raw logs.
